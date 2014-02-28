@@ -1,0 +1,12 @@
+*.o
+*.swp
+*.pyc
+*.fla
+*.pid
+*.swf
+*.log
+*.DS_Store
+*~
+node_modules
+config.js
+conf.zip
