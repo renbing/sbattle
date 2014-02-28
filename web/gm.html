@@ -1,0 +1,569 @@
+<!doctype html>
+ 
+<html lang="en">
+<head>
+<meta charset="utf8" />
+    <title>GM管理工具</title>
+    <style>
+        label, input { display:block; margin:5px;}
+        table { margin: 1em 0; border-collapse: collapse; }
+        table td, table th { border: 1px solid rgb(139, 139, 139); padding: .6em 10px; text-align: left; }
+        input { font-size:18px; }
+        select { font-size:18px; }
+    </style>
+    <script src="jquery-1.9.1.js"></script>
+    <script src="jquery.form.js"></script> 
+    <script>
+
+    $.formArgs = function(form) {
+        var a = [];
+        var els = form.elements;
+        if (!els) {
+            return a;
+        }
+
+        var i,j,n,v,el,max,jmax;
+        for(i=0, max=els.length; i < max; i++) {
+            el = els[i];
+            n = el.name;
+            if (!n || el.disabled) {
+                continue;
+            }
+
+            v = $.fieldValue(el, true);
+            if (v && v.constructor == Array) {
+                for(j=0, jmax=v.length; j < jmax; j++) {
+                    a.push({name: n, value: v[j]});
+                }
+            }
+            else if (v !== null && typeof v != 'undefined') {
+                a.push({name: n, value: v, type: el.type, required: el.required});
+            }
+        }
+
+        if (form.clk) {
+            var $input = $(form.clk), input = $input[0];
+            n = input.name;
+            if (n && !input.disabled && input.type == 'image') {
+                a.push({name: n, value: $input.val()});
+                a.push({name: n+'.x', value: form.clk_x}, {name: n+'.y', value: form.clk_y});
+            }
+        }
+        var args = {};
+        a.forEach(function(item){
+            args[item.name] = item.value;
+        });
+        return args;
+    };
+
+    $.fieldValue = function(el, successful) {
+        var n = el.name, t = el.type, tag = el.tagName.toLowerCase();
+        if (successful === undefined) {
+            successful = true;
+        }
+
+        if (successful && (!n || el.disabled || t == 'reset' || t == 'button' ||
+            (t == 'checkbox' || t == 'radio') && !el.checked ||
+            (t == 'submit' || t == 'image') && el.form && el.form.clk != el ||
+            tag == 'select' && el.selectedIndex == -1)) {
+                return null;
+        }
+
+        if (tag == 'select') {
+            var index = el.selectedIndex;
+            if (index < 0) {
+                return null;
+            }
+            var a = [], ops = el.options;
+            var one = (t == 'select-one');
+            var max = (one ? index+1 : ops.length);
+            for(var i=(one ? index : 0); i < max; i++) {
+                var op = ops[i];
+                if (op.selected) {
+                    var v = op.value;
+                    if (!v) { // extra pain for IE...
+                        v = (op.attributes && op.attributes['value'] && !(op.attributes['value'].specified)) ? op.text : op.value;
+                    }
+                    if (one) {
+                        return v;
+                    }
+                    a.push(v);
+                }
+            }
+            return a;
+        }
+        return $(el).val();
+    };
+
+    String.prototype.format = function(obj) {
+        return this.replace(/%\{([\w_]+)\}/g, function(m,key){
+            return obj[key];
+        });
+    };
+
+
+    var gOptions = {'openid':'', 'uid':'', 'openkey':'', 'act':'login'};
+    var gWSC = null;
+    $(document).ready(function(){
+        if( document.location.hash ) {
+            $("#openid")[0].value = document.location.hash.substr(1);
+            gOptions.openid = document.location.hash.substr(1);
+        }
+        
+        $("#login-form").ajaxForm({'data':gOptions, 'success': onSubmit});
+    });
+    
+    function submitGM(form) {
+        var args = $.formArgs(form);
+        args.gmkey = gOptions.openkey;
+        var data = {'mod':'gm', 'act':'gm', 'uid':gOptions.uid, 'args':args};
+        gWSC.send(JSON.stringify(data));
+    }
+
+    function onSubmit(rawData) {
+        var data = JSON.parse(rawData);
+        if( data.code == 0 ) {
+            gWSC = new WebSocket(data.data.server);
+            gWSC.onopen = function(evt) {  
+                console.log("Connected to WebSocket server.");  
+                var args = {'gmkey': gOptions.openkey};
+                var data = {'mod':'user', 'act':'login', 'uid':gOptions.uid, 'args':args};
+                gWSC.send(JSON.stringify(data));
+            };  
+            gWSC.onclose = function(evt) {  
+                console.log("Disconnected");  
+            };  
+            gWSC.onmessage = function(evt) {  
+                $("#message").show();
+                var data = evt.data;  
+                if( data.code != 0 ) {
+                    $("#message").text(data.desc);
+                }else{
+                    $("#message").text('成功');
+                }
+            };  
+            gWSC.onerror = function(evt) {  
+                console.log('Error occured: ' + evt);  
+            };  
+
+        }
+    }
+
+    function onSubmit2(rawData) {
+        var data = {code:0, desc:''};
+        try{
+            data = JSON.parse(rawData);
+        }catch(e){
+            data.code = 1;
+            data.desc = rawData;
+        }
+        if( data.code != 0 || ['get', 'get_uid', 'message'].indexOf(data.args.method) < 0 ) {
+            $("#message").show();
+            if( data.code == 0 ) {
+                $("#message").text('成功');
+            }else{
+                $("#message").text(data.desc);
+            }
+            $("#user_data").hide();
+        }else{
+            if( data.args.method == '' ) {
+            }else if( data.args.method == 'get' ) {
+                data = data.data;
+                var createDate = new Date(data.info.create * 1000);
+                data.info.create = [createDate.getFullYear(), createDate.getMonth()+1, createDate.getDay()].join('-');
+                $("#message").hide();
+                $("#message-data").hide();
+                $("#user_data").show();
+
+                var cols = ['openid', 'uid', 'un', 'create', 'yellow', 'yellow_year', 'blue', 'blue_year', 'platform'];
+                $("#info tbody").html(createTableTR(cols).format(data.info));
+
+                cols = ['xp', 'level', 'vip', 'gold', 'cash', 'food', 'honor', 'soul', 'fight_force'];
+                $("#status tbody").html(createTableTR(cols).format(data.status));
+
+                cols = ['day', 'food', 'gold'];
+                $("#mark tbody").html(createTableTR(cols).format(data.mark));
+                
+                var html = "";
+                cols = ['name', 'level', 'soldier_level', 'soul', 'god', 'fight_force'];
+                var roles = data.role;
+                for( var rid in roles ) {
+                    var role = roles[rid];
+                    role.name = gConfRole[rid].Name;
+                    html += createTableTR(cols).format(role);
+                }
+                $("#role tbody").html(html);
+
+                var inventorys = [];
+                var material = data.inventory.material;
+                for( var id in material ) {
+                    inventorys.push({name:gConfMaterial[id].Name, num:material[id]});
+                }
+
+                var gem = data.inventory.gem;
+                for( var id in gem ) {
+                    inventorys.push({name:gConfGem[id].Name, num:gem[id]});
+                }
+
+                html = "";
+                inventorys.sort(function(a, b){return b.num - a.num;});
+                for( var i=0; i<inventorys.length; i++ ) {
+                    var obj = inventorys[i];
+                    html += "<tr><td>" + obj.name + "</td><td>" + obj.num + "</td></tr>";
+                }
+                $("#inventory tbody").html(html);
+            }else if( data.args.method == 'message' ) {
+                data = data.data.ims;
+                $("#message").hide();
+                $("#message-data").show();
+                $("#user-data").hide();
+
+                var cols = ['uid', 'name', 'content'];
+                var html = "";
+                data.forEach(function(item){
+                    html += createTableTR(cols).format(item);
+                });
+
+                $("#message-content tbody").html(html);
+            }else if( data.args.method == 'get_uid' ) {
+                if( data.data.length == 0 ) {
+                    $("#change-uid")[0].innerHTML = "没有可以更新的UID";
+                }else{
+                    var html = "<form id='change-uid-form', action='.'>";
+                    html += "<input type='hidden' name='method' id='method' value='change_uid'/>";
+                    html += "<label for='new_uid'>选择UID:</label>";
+                    html += "<select name='new_uid'>";
+
+                    data.data.forEach(function(uid){
+                        var obj = {uid:uid, value:''};
+                        var sid = 0;
+                        if( uid > 100000000 ) {
+                            if( uid < 101000000 ) {
+                                sid = 46
+                            }else{
+                                sid = Math.floor((uid-100000000)/100000);
+                            }
+                        }else{
+                            sid = Math.floor(uid/1000000);
+                        }
+
+                        sid = sid - 1;
+                        obj.value = sid + "服-" + uid;
+                        html += "<option value='%{uid}'>%{value}</option>".format(obj);
+                    });
+                    html += "</select>";
+                    html += "<input type='submit' value='变更'/>";
+                    html += "</form>"; 
+                    $("#change-uid")[0].innerHTML = html;
+                    $("#change-uid-form").ajaxForm(options);
+                }
+            }
+        }
+    }
+
+    function createTableTR(cols){
+        var newCols = [];
+        for( var i=0; i<cols.length; i++ ) {
+            newCols.push('<td>%{' + cols[i] + '}</td>');
+        }
+
+        return "<tr>" + newCols.join('') + "</tr>";
+    }
+
+    function changeInventoryType(type){
+        var html = "";
+        var conf = {};
+        if( type == 'gem' ) {
+            conf = gConfGem;
+        }else{
+            conf = gConfMaterial;
+        }
+
+        for( var id in conf ) {
+            html += "<option value='%{Id}'>%{Name}</option>".format(conf[id]);
+        }
+        $("#inventory-form select")[1].innerHTML = html;
+    }
+
+    </script>
+</head>
+<body>
+
+<div id="message" style="color:red">
+</div>
+
+<h3>账号信息</h3>
+<label for="name">密码</label>
+<input type="password" name="key" id="key" onchange="gOptions.openkey=this.value;"/>
+<label for="openid">玩家平台Id:</label>
+<input type="text" name="openid" id="openid" onchange="gOptions.openid=this.value;"/>
+<label for="uid">玩家游戏Id:</label>
+<input type="text" name="uid" id="uid" onchange="gOptions.uid=this.value;"/>
+<form id="login-form" action="." style="float:left;padding-left:50px">
+    <input type="submit" value="登录" style="width:100px"/>
+</form>
+<form id="get-form" action="." style="float:left;padding-left:50px">
+    <input type="hidden" name="method" id="method" value="get"/>
+    <input type="submit" value="查询" style="width:100px"/>
+</form>
+<form id="block-form" action="." style="float:left;padding-left:60px">
+    <input type="hidden" name="method" id="method" value="block"/>
+    <input type="submit" value="封禁"/>
+</form>
+<form id="unblock-form" action="." style="float:left;padding-left:10px">
+    <input type="hidden" name="method" id="method" value="unblock"/>
+    <input type="submit" value="解封"/>
+</form>
+<form id="block_talk-form" action="." style="float:left;padding-left:10px">
+    <input type="hidden" name="method" id="method" value="block_talk"/>
+    <input type="submit" value="禁言"/>
+</form>
+<form id="clear_inventory-form" action="." style="float:left;padding-left:10px">
+    <input type="hidden" name="method" id="method" value="clear_inventory"/>
+    <input type="submit" value="清空背包"/>
+</form>
+<form id="diamond-form" action="." style="float:left;padding-left:10px">
+    <input type="hidden" name="method" id="method" value="diamond"/>
+    <input type="submit" value="充值黄钻"/>
+</form>
+<form id="message-form" action="." style="float:left;padding-left:10px">
+    <input type="hidden" name="method" id="method" value="message"/>
+    <input type="submit" value="查询聊天"/>
+</form>
+
+<table style="width:100%">
+<tr>
+<td>
+    <h3>基础数据</h3>
+    <form id="status-form" action=".">
+        <input type="hidden" name="method" id="method" value="status"/>
+        <label for="type">变更数据:</label>
+        <table><tr>
+        <td><input name="type" type="radio" value="gold">金币</input></td>
+        <td><input name="type" type="radio" value="food">粮草</input></td>
+        <td><input name="type" type="radio" value="xp">经验</input></td>
+        <td><input name="type" type="radio" value="honor">军功</input></td>
+        <td><input name="type" type="radio" value="level">等级</input></td>
+        <td><input name="type" type="radio" value="cash" checked=true>元宝</input></td>
+        <td><input name="type" type="radio" value="soul">武魂</input></td>
+        <tr></table>
+        <label for="change">变化值:</label>
+        <input type="text" name="change" id="change" value="" />
+        <label for="target">目标值:</label>
+        <input type="text" name="target" id="target" value="" />
+        <input type="button" value="修改" onclick="submitGM(this.parentNode);"/>
+    </form>
+</td>
+
+<td>
+    <h3>标志数据</h3>
+    <form id="mark-form" action=".">
+        <input type="hidden" name="method" id="method" value="mark"/>
+        <label for="type">变更数据:</label>
+        <select name="type">
+            <option value="tutorial" selected="selected" >新手引导步骤</option>
+            <option value="food">每日付费购买粮食次数</option>
+            <option value="day">设置登录日期eg:20130701</option>
+            <option value="daily_task">设置每日任务最后领取分数</option>
+        </select>
+        <label for="value">目标值:</label>
+        <input type="text" name="value" id="value" value="" />
+        <input type="submit" value="修改"/>
+    </form>
+</td>
+
+<td>
+    <h3>任务</h3>
+    <form id="task-form" action=".">
+        <input type="hidden" name="method" id="method" value="task"/>
+        <label for="type">设置任务ID:</label>
+        <select name="type">
+            <option value="main" selected="selected" >主线任务</option>
+        </select>
+        <label for="value">目标值:</label>
+        <input type="text" name="value" id="value" value="" />
+        <input type="submit" value="修改"/>
+    </form>
+</td>
+
+<td>
+    <h3>发放物品</h3>
+    <form id="inventory-form" action=".">
+        <input type="hidden" name="method" id="method" value="inventory"/>
+        <label for="type">物品类型:</label>
+        <select id="type" name="type"  onchange="changeInventoryType(this.value);">
+            <option value="material" selected="selected" >材料</option>
+            <option value="gem">宝石</option>
+        </select>
+        <label for="id">物品编号:</label>
+        <select id="id" name="id">
+        </select>
+        <label for="num">数量:</label>
+        <input type="text" name="num" id="num" value="" />
+        <input type="submit" value="发放"/>
+    </form>
+</td>
+<td>
+    <h3>发放装备</h3>
+    <form id="equip-form" action=".">
+        <input type="hidden" name="method" id="method" value="equip"/>
+        <label for="type">装备类型:</label>
+        <table><tr>
+        <td><input name="type" type="radio" value="weapon" checked=true>物理武器</input></td>
+        <td><input name="type" type="radio" value="magic">法师武器</input></td>
+        <td><input name="type" type="radio" value="accessory">饰品</input></td>
+        <td><input name="type" type="radio" value="armor">防具</input></td>
+        <tr></table>
+        <label for="level">打造等级(请查询配置文件):</label>
+        <input type="text" name="level" id="level" value="(1-16)级" />
+        <input type="submit" value="发放"/>
+    </form>
+</td>
+</tr>
+<tr>
+<td>
+    <h3>发放武将</h3>
+    <form id="role-form" action=".">
+        <input type="hidden" name="method" id="method" value="role"/>
+        <select name="id">
+        </select>
+        <label for="num">数量:</label>
+        <input type="text" name="num" id="num" value="" />
+        <input type="submit" value="发放"/>
+    </form>
+</td>
+
+<td>
+    <h3>VIP</h3>
+    <form id="vip-form" action=".">
+        <input type="hidden" name="method" id="method" value="vip"/>
+        <input type="text" name="value" id="value" value="(1-10)级" />
+        <input type="submit" value="VIP"/>
+    </form>
+</td>
+
+<td>
+    <h3>充值</h3>
+    <form id="pay-form" action=".">
+        <input type="hidden" name="method" id="method" value="pay"/>
+        <label for="cash">充值元宝:</label>
+        <input type="text" name="cash" id="cash" value="" />
+        <input type="submit" value="充值"/>
+    </form>
+</td>
+
+<td>
+    <h3>合区换号</h3>
+    <form id="uid-form" action=".">
+        <input type="hidden" name="method" id="method" value="get_uid"/>
+        <input type="submit" value="查询"/>
+    </form>
+    <div id="change-uid">
+    </div>
+</td>
+
+<td>
+</td>
+
+</tr>
+</table>
+
+<div id="user_data" style="display:none">
+<h3>玩家信息</h3>
+<table id="info">
+    <thead>
+        <tr>
+            <th>OpenID</th> 
+            <th>游戏ID</th> 
+            <th>姓名</th> 
+            <th>创建时间</th> 
+            <th>黄钻</th> 
+            <th>年费黄钻</th> 
+            <th>蓝钻</th> 
+            <th>年费蓝钻</th> 
+            <th>注册平台</th> 
+        </tr>
+    </thead>
+<tbody>
+</tbody>
+</table>
+
+<h3>基础数据</h3>
+<table id="status">
+    <thead>
+        <tr>
+            <th>经验</th>
+            <th>等级</th>
+            <th>VIP</th> 
+            <th>金币</th> 
+            <th>元宝</th> 
+            <th>粮草</th> 
+            <th>军功</th> 
+            <th>武魂</th> 
+            <th>战斗力</th> 
+        </tr>
+    </thead>
+<tbody>
+</tbody>
+</table>
+
+<h3>标志数据</h3>
+<table id="mark">
+    <thead>
+        <tr>
+            <th>上次登录日期</th> 
+            <th>每日付费买粮</th> 
+            <th>每日付费买金</th> 
+        </tr>
+    </thead>
+<tbody>
+</tbody>
+</table>
+
+<h3>武将数据</h3>
+<table id="role">
+    <thead>
+        <tr>
+            <th>名称</th> 
+            <th>等级</th> 
+            <th>转职</th> 
+            <th>炼魂</th> 
+            <th>神将</th> 
+            <th>战斗力</th> 
+        </tr>
+    </thead>
+<tbody>
+</tbody>
+</table>
+
+<h3>包裹数据</h3>
+<table id="inventory">
+    <thead>
+        <tr>
+            <th>名称</th> 
+            <th>数量</th> 
+        </tr>
+    </thead>
+<tbody>
+
+</tbody>
+</table>
+</div>
+
+<div id="message-data" style="display:none">
+<h3>聊天信息</h3>
+<table id="message-content">
+    <thead>
+        <tr>
+            <th>游戏ID</th> 
+            <th>姓名</th> 
+            <th>内容</th> 
+        </tr>
+    </thead>
+<tbody>
+</tbody>
+</table>
+</div>
+
+</body>
+</html>

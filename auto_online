@@ -1,0 +1,12 @@
+#!/bin/sh
+
+git reset --hard HEAD >/dev/null 2>&1 
+git pull >/dev/null 2>&1 
+./manage stop
+sleep 2
+node initdb.js
+if [ $? -eq 0 ]; then
+    ./manage start
+else
+    echo 'init db error'
+fi

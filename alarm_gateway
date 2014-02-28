@@ -1,0 +1,31 @@
+#!/bin/bash
+
+echo $$ > alarm_gateway.pid
+
+while true
+do
+    sleep 10
+    fail=0
+    if [ ! -f gateway.pid ]; then
+        fail=1
+    else
+        pid=`cat gateway.pid`
+        if [ ! -d "/proc/${pid}" ]; then
+            fail=1
+        fi
+    fi
+
+
+    config='config.js'
+    if [ -f '../config.js' ]; then
+        config='../config.js'
+    fi
+    serverId=`grep exports.GatewayId $config| awk '{print $3}' | awk -F';' '{print $1}'`
+
+    if [ $fail -eq 1 ]; then
+        if [ -f /usr/local/services/CloudDCAgent_L5-1.0/alarm/cloud_alarm ];then
+            /usr/local/services/CloudDCAgent_L5-1.0/alarm/cloud_alarm 100712667 "error gateway $serverId"
+        fi
+    fi
+    sleep 50
+done

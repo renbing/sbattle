@@ -1,0 +1,162 @@
+#!/bin/bash
+#
+# manage a group of games
+
+prog="node"
+options="--max-old-space-size=4000" #设置nodejs内测限制M
+error_log="log/error.log"
+
+RETVAL=0
+_start() {
+    # game game.js id game.log 
+
+    name=$1
+    args=$2
+    id=$3
+    logs=$4
+    pidfile="$name$id.pid"
+
+    echo -n $"start $name $id "
+    if [ -f $pidfile ]; then
+        echo -e "\E[31;40m[FAIL]\033[0m"
+        echo "$name $id is Running"
+    else
+        $prog $args >>$logs 2>>$error_log &
+        for i in {1..5}; do
+            if [ -f $pidfile ]; then
+                echo -e "\E[32;40m[OK]\033[0m"
+                break
+            else
+                if [ $i -eq 5 ]; then
+                    echo -e "\E[31;40m[FAIL]\033[0m"
+                fi
+            fi
+            sleep 1
+        done
+    fi
+    RETVAL=$?
+}
+
+_stop() {
+    name=$1
+    id=$2
+    pidfile="$name$id.pid"
+
+    echo -n $"stop $name $id "
+    if [ -f ${pidfile} ]; then
+        pid=`cat ${pidfile}`
+        if [ -d "/proc/${pid}" ]; then
+            while [ -d "/proc/${pid}" ]; do
+                kill  ${pid}
+                sleep 1
+            done
+        fi
+        rm -f ${pidfile}
+    fi
+    echo -e "\E[32;40m[OK]\033[0m"
+    RETVAL=$?
+}
+_reload() {
+    echo $"Reloading nothing "
+    RETVAL=$?
+}
+
+_status() {
+    name=$1
+    id=$2
+    pidfile="$name$id.pid"
+    
+    echo -n -e "$name $id "
+    if [ -f ${pidfile} ]; then
+        pid=`cat ${pidfile}`
+        if [ -d "/proc/${pid}" ]; then
+            echo -e "\E[32;40m[Running]\033[0m"
+        else
+            echo -e "\E[31;40m[Lost]\033[0m"
+        fi
+    else
+        echo -e "\E[31;40m[Stoped]\033[0m"
+    fi
+
+    RETVAL=$?
+}
+
+start() {
+    config='config.js'
+    if [ -f '../config.js' ]; then
+        config='../config.js'
+    fi
+
+    gameGroupId=`grep exports.GameGroupId $config| awk '{print $3}' | awk -F';' '{print $1}'`
+    gameCount=`grep exports.GameCount $config| awk '{print $3}' | awk -F';' '{print $1}'`
+    for (( c=1; c<=$gameCount; c++ ))
+    do
+        _start game game.js $c log/game.log
+    done
+
+    pidfile='alarm.pid'
+    echo -n $"start alarm "
+    if [ -f $pidfile ]; then
+        echo -e "\E[31;40m[FAIL]\033[0m"
+        echo "alarm is Running"
+    else
+        ./alarm $gameGroupId >/dev/null &
+        echo -e "\E[32;40m[OK]\033[0m"
+    fi
+}
+
+stop() {
+    _stop alarm
+
+    config='config.js'
+    if [ -f '../config.js' ]; then
+        config='../config.js'
+    fi
+
+    gameCount=`grep exports.GameCount $config| awk '{print $3}' | awk -F';' '{print $1}'`
+    for (( c=1; c<=$gameCount; c++ ))
+    do
+        _stop game $c
+    done
+}
+
+status() {
+    _status alarm
+
+    config='config.js'
+    if [ -f '../config.js' ]; then
+        config='../config.js'
+    fi
+
+    gameCount=`grep exports.GameCount $config| awk '{print $3}' | awk -F';' '{print $1}'`
+    for (( c=1; c<=$gameCount; c++ ))
+    do
+        _status game $c
+    done
+}
+
+# See how we were called.
+case "$1" in
+  start)
+        start
+        ;;
+  stop)
+        stop
+        ;;
+  status)
+        status
+        ;;
+  restart)
+        stop
+        sleep 3
+        start
+        ;;
+  reload)
+        _reload
+        ;;
+  *)
+        echo $"Usage: manage {start|stop|restart|status|reload}"
+        exit 1
+esac
+
+exit $RETVAL
