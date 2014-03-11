@@ -45,7 +45,7 @@ Message.prototype = {
         }
 
         for( var sid in allianceMessage.user ) {
-            gGame.allianceTalk(sid, allianceMessage.user[sid], im);
+            gWorld2Game.allianceTalk(sid, allianceMessage.user[sid], im, uid);
         }
     },
     
@@ -63,79 +63,5 @@ Message.prototype = {
     },
 }
 
-exports.get = function(req, resp, onHandled) {
-    do {
-        resp.data.messages = gMessage.getMessage(req.uid, req.args.all);
-
-        var prisonUpdate = gMessage.getPrisonUpdate(req.uid);
-        if( prisonUpdate ) {
-            resp.data.prison = prisonUpdate;
-        }
-
-        if( req.args.league ) {
-            resp.data.leaguetalks = gMessage.getLeaguetalk(req.uid, req.args.league); 
-        }
-
-        resp.data.ims = gMessage.getIM(req.uid);
-        resp.data.headlines = gMessage.getHeadline(req.uid);
-    } while(false);
-
-    onHandled();
-}
-
-exports.im = function(req, resp, onHandled) {
-    do {
-        if( req.args.name && req.args.content ) {
-            gMessage.addIM(req.uid, req.args.name, req.args.content, req.args.gentry);
-        }
-
-    } while(false);
-
-    onHandled();
-}
-
-exports.headline = function(req, resp, onHandled) {
-    do {
-        if( req.args.name && req.args.content ) {
-            gMessage.addHeadline(req.uid, req.args.name, req.args.content, req.args.gentry);
-        }
-    } while(false);
-
-    onHandled();
-}
-
-exports.leaguetalk = function(req, resp, onHandled) {
-    do {
-        if( !req.args.league ) {
-            resp.code = 1; resp.desc = 'invalid'; break;
-        }
-        
-        if( req.args.name && req.args.content ) {
-            gMessage.addLeaguetalk(req.uid, req.args.name, req.args.content, req.args.league, req.args.gentry);
-        }
-    } while(false);
-
-    onHandled();
-}
-
-exports.chat = function(req, resp, onHandled) {
-    do {
-        var userInfo = gUserInfo.getUser(req.args.uid);
-        if( userInfo ) {
-            var message = {
-                'type': 'chat', 
-                'uid': req.uid,
-                'name': gUserInfo.getUser(req.uid).name,
-                'time': common.getTime(),
-                'content': req.args.content,
-                'gentry':  req.args.gentry,
-            };
-            gMessage.addMessage(req.args.uid, message);
-        }
-        
-    } while(false);
-
-    onHandled();
-}
 
 exports.Message = Message;

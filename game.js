@@ -259,17 +259,8 @@ function handleGameReq(logicHandler, player, query, resp) {
         gPlayers.unload(player.uid);
         resp.code = gCode.ERROR; resp.desc = 'last save error';
         onSockHandled(player.sock, resp);
-    }else if( player.lock ) {
-        resp.code = gCode.ERROR; resp.desc = 'lock';
     }else{
-        var now = common.getTime();
-        var time = +new Date();
-
-        player.lastActive = now;
-        player.lock = true;
-
         logicHandler(player, query, resp, function(){
-            player.lock = false;
             if( resp.code != 0 ) {
                 player.cleanDirty();
             }else{
@@ -281,10 +272,10 @@ function handleGameReq(logicHandler, player, query, resp) {
                 player.save(forceSave);
             }
 
-            resp.data.sync_time = now;
+            resp.data.sync_time = common.getTime();
 
             var useGzip = false;
-            onSockHandled(player.sock, resp, useGzip, query, time);
+            onSockHandled(player.sock, resp, useGzip, query, +new Date());
         });
     }
 };

@@ -8,8 +8,6 @@ function Player(uid) {
     this.saveCount = 0;                 // 数据库存盘计数
     this.saveError = false;             // 是否出现数据库写入错误
 
-    this.lastActive = common.getTime(); // 上次活跃时间
-    this.lock = false;                  // 并发锁
     this.sock = null;                   // 网络连接
     this.gmkey = null;                  // gm密钥
 }
@@ -18,32 +16,67 @@ Player.create = function(uid) {
     var initUser = {
         '_id' : uid,
         'ai' : 1,               // 自增长ID,用于编号系统
-        'active_time' : 0,      // 活跃时长(lastActivie - createTime)
         'info' : {              // 基本信息
             'un':'',            // 玩家姓名
             'headpic':'',       // 玩家头像
-            'version':'',       // 上次登录客户端版本
-            'yellow':0,         // 黄钻等级
-            'blue':0,           // 蓝砖等级
-            'yellow_year':0,    // 年费黄钻
-            'blue_year':0,      // 年费蓝钻
-            'platform':'',      // 平台 qzone,pengyou,3366
             'create': common.getTime(),  // 用户创建时间
-            'via':'',           // 来源 qq_task, gdt, default
-            'invited':'',       // 邀请者
         },
 
         'status' : {            // 基础数据
             'xp':0,             // 经验
             'level':1,          // 等级
-            'gold':100000,      // 银两
-            'cash':0,           // 元宝
+            'cash':0,           // 现金
             'vip':0,            // VIP等级
-            'food':8000,        // 粮草
-            'honor':6000,       // 荣誉
-            'soul':0,           // 将魂
-            'fight_force':0,    // 战斗力
-        }
+            'supply':8000,      // 补给
+            'oil':0,            // 油
+            'iron':0,           // 铁
+            'metal':0,          // 金色
+            'gold':100000,      // 黄金
+        },
+
+        'building' : {          // 建筑
+            // pos : {id: level}
+        },
+
+        'queue' : {             // 建造升级队列
+            'building': {
+                'pos': 0,
+                'time': 0,
+            },
+            'research': {
+                'id': 0,
+                'time': 0,
+            },
+            'soldier': {
+                'id': 0,
+                'num': 0,
+                'time': 0,
+            },
+            'defence': {
+                'id': 0,
+                'num': 0,
+                'time': 0,
+            },
+        },
+
+        'task' : {
+            'finished':[],
+            'rewarded':[],
+        },
+
+        'daily_task' : {
+            'list':[],
+            'doing':0,
+            'time':0,
+            'refresh':0,
+        },
+
+        'alliance_task' : {
+            'list':[],
+            'doing':0,
+            'time':0,
+            'refresh':0,
+        },
     };
 
     return initUser;
@@ -227,6 +260,39 @@ Player.prototype = {
         }
 
         return 0;
+    },
+
+
+    costResource : function(obj) {
+        var status = this.user.status;
+        var valid = true;
+        for( var key in obj ) {
+            if( !status.hasOwnProperty(key) || status[key] < obj[key] ) {
+                valid = false;
+                break;
+            }
+        }
+
+        if( !valid ) return false;
+
+        for( var key in obj ) {
+            status[key] -= obj[key];
+            this.markDirty('status.' + key);
+        }
+
+        return true;
+    },
+
+    queueBusy : function(name) {
+    },
+
+    queueAdd : function(){
+    },
+
+    refreshDailyTask : function() {
+    }, 
+
+    refreshAllianceTask : function() {
     },
 }
 

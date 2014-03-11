@@ -19,16 +19,17 @@ World2Game.prototype = {
         }
     },
 
-    allianceTalk : function(sid, users, im) {
+    allianceTalk : function(sid, users, im, uid) {
         var sock = this.games[sid];
         if( !sock ) return;
 
         var req = {
-            mod: 'message',
-            act: 'alliance_push',
+            mod: 'alliance',
+            act: 'talk_push',
             args: {
                 users: users,
                 im: im,
+                uid: uid
             },
         };
         
